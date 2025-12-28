@@ -37,6 +37,7 @@ WebSocketsClient webSocket;
 unsigned long lastCommandTime = 0;
 int currentPwm = 0;
 int targetPwm = 0;
+int pendingTargetPwm = 0;     // Stores target speed during direction change
 bool currentDirection = true; // true = forward
 bool targetDirection = true;
 bool isChangingDirection = false;
@@ -208,8 +209,9 @@ void loop() {
       // Brake period complete, now apply new direction
       currentDirection = targetDirection;
       isChangingDirection = false;
-      Serial.printf("[Motor] Direction changed to: %s\n",
-                    currentDirection ? "FORWARD" : "REVERSE");
+      targetPwm = pendingTargetPwm; // Restore target
+      Serial.printf("[Motor] Direction changed to: %s, restoring PWM to %d\n",
+                    currentDirection ? "FORWARD" : "REVERSE", targetPwm);
     } else {
       // Still braking - keep motor stopped
       return;
@@ -265,7 +267,8 @@ void moveMotor(bool forward, int speedPercent) {
   // Only initiate direction change if motor is running and direction differs
   if (forward != currentDirection && currentPwm > 0) {
     Serial.println("[Motor] Direction change requested - braking first");
-    targetPwm = 0;
+    pendingTargetPwm = targetPwm; // Save intended target
+    targetPwm = 0;                // Force stop for braking
     targetDirection = forward;
     isChangingDirection = true;
     directionChangeStartTime = millis();

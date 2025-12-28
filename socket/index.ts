@@ -12,7 +12,7 @@ function broadcastToAll(server: Bun.Server<any>, message: object) {
     server.publish("broadcast", payload);
 }
 
-// Helper to broadcast the current user count
+// Helper to broadcast current user count
 function broadcastUserCount(server: Bun.Server<any>) {
     broadcastToAll(server, {
         type: 'users',
@@ -20,7 +20,7 @@ function broadcastUserCount(server: Bun.Server<any>) {
     });
 }
 
-const server = Bun.serve<{ ip: string }>({
+const server = Bun.serve<{ ip: string; id: string }>({
     port: PORT,
     tls: {
         cert: Bun.file("cert.pem"),
@@ -30,6 +30,7 @@ const server = Bun.serve<{ ip: string }>({
         const success = server.upgrade(req, {
             data: {
                 ip: server.requestIP(req)?.address || "Unknown",
+                id: Math.random().toString(36).substr(2, 9), // Assign ID during upgrade or in open
             },
         });
         if (success) return undefined;
@@ -38,22 +39,42 @@ const server = Bun.serve<{ ip: string }>({
     },
     websocket: {
         open(ws) {
-            console.log(`New device connected: ${ws.data.ip}`);
+            // Ensure ID exists (if not set in upgrade, set here, but it's cleaner in upgrade)
+            if (!ws.data.id) ws.data.id = Math.random().toString(36).substr(2, 9);
+            
+            console.log(`New device connected: ${ws.data.ip} (ID: ${ws.data.id})`);
             ws.subscribe("broadcast");
             
-            // Send the current state to a newly connected client
+            // Send current state to newly connected client
             ws.send(JSON.stringify({
                 type: 'state',
                 ...globalState,
+                // Send their own ID so they know who they are (optional, but good practice)
+                userId: ws.data.id 
             }));
             
             // Broadcast updated user count to all clients
             broadcastUserCount(server);
         },
-        message(_, message) {
+        message(ws, message) {
             try {
                 const data = JSON.parse(message.toString());
                 
+                // Handle cursor movements
+                if (data.type === 'cursor') {
+                    // Broadcast cursor position to ALL clients (including sender? No, client should filter)
+                    // Actually, for cursors, we usually don't want to see our own laggy network cursor.
+                    // But using "broadcast" topic sends to everyone. 
+                    // Client will filter out its own ID.
+                    ws.publish("broadcast", JSON.stringify({
+                        type: 'cursor',
+                        id: ws.data.id,
+                        x: data.x,
+                        y: data.y
+                    }));
+                    return;
+                }
+
                 // Handle command messages from clients
                 if (data.type === 'command' || (!data.type && data.speed !== undefined)) {
                     // Update global state
@@ -71,8 +92,14 @@ const server = Bun.serve<{ ip: string }>({
             }
         },
         close(ws) {
-            console.log('Device disconnected');
+            console.log(`Device disconnected (ID: ${ws.data.id})`);
             ws.unsubscribe("broadcast");
+            
+            // Broadcast disconnect event so clients can remove cursor
+            ws.publish("broadcast", JSON.stringify({
+                type: 'user_disconnected',
+                id: ws.data.id
+            }));
             
             // Broadcast updated user count after disconnect
             // Use setTimeout to ensure unsubscribe is processed
