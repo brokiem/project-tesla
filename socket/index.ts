@@ -2,6 +2,10 @@ const PORT = 4777;
 
 const server = Bun.serve<{ ip: string }>({
     port: PORT,
+    tls: {
+        cert: Bun.file("cert.pem"),
+        key: Bun.file("key.pem"),
+    },
     fetch(req, server) {
         const success = server.upgrade(req, {
             data: {
@@ -29,5 +33,6 @@ const server = Bun.serve<{ ip: string }>({
     },
 });
 
-console.log(`🚀 Motor Control Server running on port ${server.port}`);
-console.log(`Make sure your ESP32 and Browser connect to your Laptop's IP!`);
+console.log(`🚀 Motor Control Server running on port ${server.port} (WSS)`);
+console.log(`Make sure your ESP32 and Browser connect using wss://!`);
+console.log(`Ensure 'cert.pem' and 'key.pem' are in the socket directory.`);
