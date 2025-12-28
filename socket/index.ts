@@ -1,5 +1,25 @@
 const PORT = 4777;
 
+// Global state
+let globalState = {
+    speed: 0,
+    forward: true,
+};
+
+// Helper to broadcast to all clients
+function broadcastToAll(server: Bun.Server<any>, message: object) {
+    const payload = JSON.stringify(message);
+    server.publish("broadcast", payload);
+}
+
+// Helper to broadcast the current user count
+function broadcastUserCount(server: Bun.Server<any>) {
+    broadcastToAll(server, {
+        type: 'users',
+        count: server.subscriberCount("broadcast"),
+    });
+}
+
 const server = Bun.serve<{ ip: string }>({
     port: PORT,
     tls: {
@@ -20,15 +40,45 @@ const server = Bun.serve<{ ip: string }>({
         open(ws) {
             console.log(`New device connected: ${ws.data.ip}`);
             ws.subscribe("broadcast");
+            
+            // Send the current state to a newly connected client
+            ws.send(JSON.stringify({
+                type: 'state',
+                ...globalState,
+            }));
+            
+            // Broadcast updated user count to all clients
+            broadcastUserCount(server);
         },
-        message(ws, message) {
-            // When we receive a command (from Browser), broadcast it to everyone (ESP32)
-            // ws.publish sends to all subscribers EXCEPT the sender
-            ws.publish("broadcast", message);
+        message(_, message) {
+            try {
+                const data = JSON.parse(message.toString());
+                
+                // Handle command messages from clients
+                if (data.type === 'command' || (!data.type && data.speed !== undefined)) {
+                    // Update global state
+                    globalState.speed = parseInt(data.speed) || 0;
+                    globalState.forward = data.forward ?? true;
+                    
+                    // Broadcast new state to ALL clients (including sender)
+                    broadcastToAll(server, {
+                        type: 'state',
+                        ...globalState,
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to parse message:', e);
+            }
         },
         close(ws) {
             console.log('Device disconnected');
             ws.unsubscribe("broadcast");
+            
+            // Broadcast updated user count after disconnect
+            // Use setTimeout to ensure unsubscribe is processed
+            setTimeout(() => {
+                broadcastUserCount(server);
+            }, 0);
         },
     },
 });
