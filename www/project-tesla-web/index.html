@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP32 Motor Control</title>
+    <style>
+        :root {
+            --background: 240 10% 3.9%;
+            --foreground: 0 0% 98%;
+            --card: 240 10% 3.9%;
+            --card-foreground: 0 0% 98%;
+            --popover: 240 10% 3.9%;
+            --popover-foreground: 0 0% 98%;
+            --primary: 0 0% 98%;
+            --primary-foreground: 240 5.9% 10%;
+            --secondary: 240 3.7% 15.9%;
+            --secondary-foreground: 0 0% 98%;
+            --muted: 240 3.7% 15.9%;
+            --muted-foreground: 240 5% 64.9%;
+            --accent: 240 3.7% 15.9%;
+            --accent-foreground: 0 0% 98%;
+            --destructive: 0 62.8% 30.6%;
+            --destructive-foreground: 0 0% 98%;
+            --border: 240 3.7% 15.9%;
+            --input: 240 3.7% 15.9%;
+            --ring: 240 4.9% 83.9%;
+            --radius: 0.5rem;
+        }
+
+        body {
+            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: hsl(var(--background));
+            color: hsl(var(--foreground));
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .card {
+            background-color: hsl(var(--card));
+            color: hsl(var(--card-foreground));
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 350px;
+            padding: 1.5rem;
+            position: relative;
+        }
+
+        .header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.375rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            line-height: 1;
+            letter-spacing: -0.025em;
+            margin: 0;
+        }
+
+        .description {
+            font-size: 0.875rem;
+            color: hsl(var(--muted-foreground));
+            margin: 0;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 9999px;
+            padding: 0.125rem 0.625rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            margin-top: 0.5rem;
+            width: fit-content;
+        }
+
+        .status-badge.connected {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: rgb(52, 211, 153);
+            border-color: rgba(16, 185, 129, 0.2);
+        }
+
+        .status-badge.disconnected {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: rgb(248, 113, 113);
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .slider-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            line-height: 1;
+        }
+
+        .value {
+            font-size: 0.875rem;
+            color: hsl(var(--muted-foreground));
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Custom Range Input */
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 0.5rem;
+            background: hsl(var(--secondary));
+            border-radius: 9999px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 1.25rem;
+            height: 1.25rem;
+            background: hsl(var(--primary));
+            border: 2px solid hsl(var(--background));
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.1s;
+            box-shadow: 0 0 0 1px hsl(var(--border));
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+
+        input[type="range"]:focus::-webkit-slider-thumb {
+            box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .stop-button-wrapper {
+            grid-column: span 2;
+        }
+
+        button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            font-weight: 500;
+            height: 2.5rem;
+            padding: 0 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            outline: none;
+            border: 1px solid transparent;
+        }
+
+        button:focus-visible {
+            box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+        }
+
+        .btn-primary {
+            background-color: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+        }
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+        /* Active state for direction buttons */
+        .btn-primary.active {
+            background-color: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            border-color: hsl(var(--primary));
+        }
+        /* Inactive state for direction buttons */
+        .btn-primary.inactive {
+            background-color: hsl(var(--secondary));
+            color: hsl(var(--muted-foreground));
+            border-color: transparent;
+        }
+        .btn-primary.inactive:hover {
+            background-color: hsl(var(--secondary) / 0.8);
+            color: hsl(var(--secondary-foreground));
+        }
+
+        .btn-destructive {
+            background-color: hsl(var(--destructive));
+            color: hsl(var(--destructive-foreground));
+            width: 100%;
+        }
+        .btn-destructive:hover {
+            opacity: 0.9;
+        }
+        .btn-destructive:active {
+            transform: scale(0.98);
+        }
+
+        .btn-icon {
+            background: transparent;
+            border: none;
+            color: hsl(var(--muted-foreground));
+            padding: 0.5rem;
+            height: auto;
+        }
+        .btn-icon:hover {
+            color: hsl(var(--foreground));
+            background-color: hsl(var(--secondary));
+        }
+
+        /* Icons */
+        .icon {
+            width: 1rem;
+            height: 1rem;
+            margin-right: 0.5rem;
+        }
+        .icon-only {
+            margin-right: 0;
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        /* Modal/Dialog */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal {
+            background-color: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            width: 90%;
+            max-width: 320px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        .modal-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            margin-top: 0;
+        }
+        .input-group {
+            margin-bottom: 1rem;
+        }
+        .input-label {
+            display: block;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+            color: hsl(var(--muted-foreground));
+        }
+        .text-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 0.5rem;
+            border-radius: var(--radius);
+            border: 1px solid hsl(var(--input));
+            background-color: hsl(var(--background));
+            color: hsl(var(--foreground));
+            font-size: 0.875rem;
+        }
+        .text-input:focus {
+            outline: none;
+            border-color: hsl(var(--ring));
+            box-shadow: 0 0 0 1px hsl(var(--ring));
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div class="header">
+        <div class="header-top">
+            <h1 class="title">Motor Control</h1>
+            <button id="btn-settings" class="btn-icon" aria-label="Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-only" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+        </div>
+        <p class="description">Manage ESP32 motor output and direction.</p>
+        <div id="status" class="status-badge disconnected">
+            <span class="status-dot"></span> Disconnected
+        </div>
+    </div>
+
+    <div class="control-group">
+        <!-- Direction Buttons (State Selectors) -->
+        <div class="button-group">
+            <button id="btn-fwd" class="btn-primary active">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                Forward
+            </button>
+            <button id="btn-back" class="btn-primary inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                Reverse
+            </button>
+        </div>
+
+        <!-- Slider -->
+        <div class="slider-wrapper">
+            <div class="slider-header">
+                <label class="label" for="slider">Power Output</label>
+                <span class="value"><span id="speed-display">0</span>%</span>
+            </div>
+            <input type="range" id="slider" min="0" max="100" value="0" />
+        </div>
+            
+        <div class="stop-button-wrapper">
+            <button id="btn-stop" class="btn-destructive">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></svg>
+                Emergency Stop
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal-overlay">
+    <div class="modal">
+        <h2 class="modal-title">Connection Settings</h2>
+        <div class="input-group">
+            <label class="input-label" for="ws-url">WebSocket URL</label>
+            <input type="text" id="ws-url" class="text-input" placeholder="ws://192.168.0.100:8080" />
+        </div>
+        <div class="modal-actions">
+            <button id="btn-cancel" class="btn-primary inactive" style="width: auto;">Cancel</button>
+            <button id="btn-save" class="btn-primary" style="width: auto;">Connect</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Configuration & State ---
+    const DEFAULT_WS_URL = 'ws://192.168.0.100:4777';
+    let socket = null;
+    
+    // State
+    let currentPercent = 0;
+    let currentDir = true; // true = forward
+
+    // --- DOM Elements ---
+    const statusBadge = document.getElementById('status');
+    const slider = document.getElementById('slider');
+    const speedDisplay = document.getElementById('speed-display');
+    const btnFwd = document.getElementById('btn-fwd');
+    const btnBack = document.getElementById('btn-back');
+    const btnStop = document.getElementById('btn-stop');
+    
+    // Modal Elements
+    const btnSettings = document.getElementById('btn-settings');
+    const modal = document.getElementById('settings-modal');
+    const btnCancel = document.getElementById('btn-cancel');
+    const btnSave = document.getElementById('btn-save');
+    const inputWsUrl = document.getElementById('ws-url');
+
+    // --- Initialization ---
+    function init() {
+        const savedUrl = localStorage.getItem('tesla_ws_url') || DEFAULT_WS_URL;
+        inputWsUrl.value = savedUrl;
+        connectWebSocket(savedUrl);
+        updateDirectionUI();
+    }
+
+    // --- WebSocket Logic ---
+    function connectWebSocket(url) {
+        if (socket) {
+            socket.close();
+        }
+
+        try {
+            socket = new WebSocket(url);
+
+            socket.onopen = () => {
+                statusBadge.innerHTML = '<span class="status-dot"></span> Connected';
+                statusBadge.className = 'status-badge connected';
+                // Resend current state on reconnect
+                sendCommand(currentPercent, currentDir);
+            };
+
+            socket.onclose = () => {
+                statusBadge.innerHTML = '<span class="status-dot"></span> Disconnected';
+                statusBadge.className = 'status-badge disconnected';
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                statusBadge.innerHTML = '<span class="status-dot"></span> Error';
+                statusBadge.className = 'status-badge disconnected';
+            };
+        } catch (e) {
+            console.error("Invalid URL", e);
+        }
+    }
+
+    function sendCommand(percent, isForward) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            const payload = JSON.stringify({
+                speed: parseInt(percent),
+                forward: isForward
+            });
+            socket.send(payload);
+        }
+        
+        // Optimistic UI updates
+        speedDisplay.textContent = percent;
+    }
+
+    // --- UI Logic ---
+    function updateDirectionUI() {
+        if (currentDir) {
+            btnFwd.className = 'btn-primary active';
+            btnBack.className = 'btn-primary inactive';
+        } else {
+            btnFwd.className = 'btn-primary inactive';
+            btnBack.className = 'btn-primary active';
+        }
+    }
+
+    // --- Event Listeners ---
+
+    // Slider
+    slider.addEventListener('input', (e) => {
+        currentPercent = e.target.value;
+        sendCommand(currentPercent, currentDir);
+    });
+
+    // Direction Buttons (State Switchers)
+    btnFwd.addEventListener('click', () => {
+        if (!currentDir) {
+            currentDir = true;
+            updateDirectionUI();
+            sendCommand(currentPercent, currentDir);
+        }
+    });
+
+    btnBack.addEventListener('click', () => {
+        if (currentDir) {
+            currentDir = false;
+            updateDirectionUI();
+            sendCommand(currentPercent, currentDir);
+        }
+    });
+
+    // Stop Button
+    btnStop.addEventListener('click', () => {
+        slider.value = 0;
+        currentPercent = 0;
+        sendCommand(0, currentDir); // Maintain direction state
+    });
+
+    // Settings Modal
+    btnSettings.addEventListener('click', () => {
+        modal.classList.add('open');
+    });
+
+    btnCancel.addEventListener('click', () => {
+        modal.classList.remove('open');
+        // Reset input to currently active URL
+        inputWsUrl.value = localStorage.getItem('tesla_ws_url') || DEFAULT_WS_URL;
+    });
+
+    btnSave.addEventListener('click', () => {
+        const newUrl = inputWsUrl.value.trim();
+        if (newUrl) {
+            localStorage.setItem('tesla_ws_url', newUrl);
+            connectWebSocket(newUrl);
+            modal.classList.remove('open');
+        }
+    });
+
+    // Close modal on outside click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.classList.remove('open');
+        }
+    });
+
+    // Start
+    init();
+</script>
+</body>
+</html>
